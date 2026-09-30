@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Categories — Inventory Management</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a class="brand" href="/">📦 Inventory</a>
+    <a href="/">Dashboard</a>
+    <a href="/products/">Products</a>
+    <a href="/categories/" class="active">Categories</a>
+  </nav>
+
+  <!-- Page content -->
+  <div class="page">
+    <h1 class="page-title">Categories</h1>
+
+    <!-- Error / success alerts -->
+    <div id="error-msg" class="alert alert-error" style="display:none;"></div>
+    <div id="success-msg" class="alert alert-info" style="display:none;"></div>
+
+    <!-- Add / Edit Form -->
+    <div class="panel">
+      <h2 id="form-title">Add Category</h2>
+      <form id="category-form">
+        <input type="hidden" id="category-id">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="category-name">Name <span style="color:#b91c1c">*</span></label>
+            <input type="text" id="category-name" placeholder="e.g. Electronics" required>
+          </div>
+          <div class="form-group">
+            <label for="category-description">Description</label>
+            <textarea id="category-description" placeholder="Optional description…"></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submit-btn">Add Category</button>
+            <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none;">Cancel</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Categories Table -->
+    <div class="panel">
+      <h2>All Categories</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Description</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="categories-table">
+            <tr class="empty-row"><td colspan="3">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    /* ── Utility ─────────────────────────────────────── */
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+      document.getElementById('success-msg').style.display = 'none';
+    }
+
+    function showSuccess(msg) {
+      const el = document.getElementById('success-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+      document.getElementById('error-msg').style.display = 'none';
+      setTimeout(() => { el.style.display = 'none'; }, 3000);
+    }
+
+    /* ── Load & render categories ────────────────────── */
+    function loadCategories() {
+      fetch(`${API}/api/categories/`)
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          const tbody = document.getElementById('categories-table');
+          if (!data.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No categories yet. Add one above!</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.map(cat => `
+            <tr>
+              <td><strong>${escapeHtml(cat.name)}</strong></td>
+              <td>${escapeHtml(cat.description)}</td>
+              <td style="white-space:nowrap;">
+                <button class="btn btn-edit"
+                  onclick="editCategory(${cat.id}, '${escapeHtml(cat.name)}', '${escapeHtml(cat.description)}')">
+                  Edit
+                </button>
+                <button class="btn btn-danger" onclick="deleteCategory(${cat.id})">Delete</button>
+              </td>
+            </tr>
+          `).join('');
+        })
+        .catch(err => {
+          showError('Could not load categories. Make sure the backend server is running at ' + API);
+          document.getElementById('categories-table').innerHTML =
+            '<tr class="empty-row"><td colspan="3">Failed to load data.</td></tr>';
+          console.error(err);
+        });
+    }
+
+    /* ── Form submit (Add or Update) ─────────────────── */
+    document.getElementById('category-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const id          = document.getElementById('category-id').value;
+      const name        = document.getElementById('category-name').value.trim();
+      const description = document.getElementById('category-description').value.trim();
+
+      const url    = id ? `${API}/api/categories/${id}/` : `${API}/api/categories/`;
+      const method = id ? 'PUT' : 'POST';
+
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          return res.json();
+        })
+        .then(() => {
+          showSuccess(id ? 'Category updated!' : 'Category added!');
+          resetForm();
+          loadCategories();
+        })
+        .catch(err => {
+          showError('Failed to save category. Please try again.');
+          console.error(err);
+        });
+    });
+
+    /* ── Edit — pre-fill the form ────────────────────── */
+    function editCategory(id, name, description) {
+      document.getElementById('category-id').value          = id;
+      document.getElementById('category-name').value        = name;
+      document.getElementById('category-description').value = description;
+      document.getElementById('form-title').textContent     = 'Edit Category';
+      document.getElementById('submit-btn').textContent     = 'Update Category';
+      document.getElementById('cancel-btn').style.display   = 'inline-block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /* ── Cancel edit — reset form ────────────────────── */
+    document.getElementById('cancel-btn').addEventListener('click', resetForm);
+
+    function resetForm() {
+      document.getElementById('category-form').reset();
+      document.getElementById('category-id').value        = '';
+      document.getElementById('form-title').textContent   = 'Add Category';
+      document.getElementById('submit-btn').textContent   = 'Add Category';
+      document.getElementById('cancel-btn').style.display = 'none';
+    }
+
+    /* ── Delete ──────────────────────────────────────── */
+    function deleteCategory(id) {
+      if (!confirm('Delete this category? This cannot be undone.')) return;
+      fetch(`${API}/api/categories/${id}/`, { method: 'DELETE' })
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          showSuccess('Category deleted.');
+          loadCategories();
+        })
+        .catch(err => {
+          showError('Failed to delete category.');
+          console.error(err);
+        });
+    }
+
+    /* ── Init ────────────────────────────────────────── */
+    loadCategories();
+  </script>
+
+</body>
+</html>

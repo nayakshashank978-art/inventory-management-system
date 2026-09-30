@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Products — Inventory Management</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a class="brand" href="/">📦 Inventory</a>
+    <a href="/">Dashboard</a>
+    <a href="/products/" class="active">Products</a>
+    <a href="/categories/">Categories</a>
+  </nav>
+
+  <!-- Page content -->
+  <div class="page">
+    <h1 class="page-title">Products</h1>
+
+    <!-- Error / success alerts -->
+    <div id="error-msg" class="alert alert-error" style="display:none;"></div>
+    <div id="success-msg" class="alert alert-info" style="display:none;"></div>
+
+    <!-- Add / Edit Form -->
+    <div class="panel">
+      <h2 id="form-title">Add Product</h2>
+      <form id="product-form">
+        <input type="hidden" id="product-id">
+        <div class="form-grid">
+
+          <div class="form-group">
+            <label for="product-name">Name <span style="color:#b91c1c">*</span></label>
+            <input type="text" id="product-name" placeholder="e.g. Widget A" required>
+          </div>
+
+          <div class="form-group">
+            <label for="product-category">Category <span style="color:#b91c1c">*</span></label>
+            <select id="product-category" required>
+              <option value="">— Select a category —</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="product-price">Price ($) <span style="color:#b91c1c">*</span></label>
+            <input type="number" id="product-price" placeholder="0.00" min="0" step="0.01" required>
+          </div>
+
+          <div class="form-group">
+            <label for="product-quantity">Quantity <span style="color:#b91c1c">*</span></label>
+            <input type="number" id="product-quantity" placeholder="0" min="0" required>
+          </div>
+
+          <div class="form-group">
+            <label for="product-threshold">Low Stock Threshold</label>
+            <input type="number" id="product-threshold" placeholder="10" min="0" value="10">
+          </div>
+
+          <div class="form-group full-width">
+            <label for="product-description">Description</label>
+            <textarea id="product-description" placeholder="Optional description…"></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="submit-btn">Add Product</button>
+            <button type="button" class="btn btn-secondary" id="cancel-btn" style="display:none;">Cancel</button>
+          </div>
+
+        </div>
+      </form>
+    </div>
+
+    <!-- Products Table -->
+    <div class="panel">
+      <h2>All Products</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Price</th>
+              <th>Quantity</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="products-table">
+            <tr class="empty-row"><td colspan="6">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    /* ── Utility ─────────────────────────────────────── */
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+      document.getElementById('success-msg').style.display = 'none';
+    }
+
+    function showSuccess(msg) {
+      const el = document.getElementById('success-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+      document.getElementById('error-msg').style.display = 'none';
+      setTimeout(() => { el.style.display = 'none'; }, 3000);
+    }
+
+    /* ── Load categories into dropdown ───────────────── */
+    function loadCategories() {
+      fetch(`${API}/api/categories/`)
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          const select = document.getElementById('product-category');
+          // Keep the placeholder option, add the rest
+          select.innerHTML = '<option value="">— Select a category —</option>';
+          data.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value       = cat.id;
+            opt.textContent = cat.name;
+            select.appendChild(opt);
+          });
+        })
+        .catch(err => {
+          showError('Could not load categories for dropdown. Make sure the backend is running at ' + API);
+          console.error(err);
+        });
+    }
+
+    /* ── Load & render products ───────────────────────── */
+    function loadProducts() {
+      fetch(`${API}/api/products/`)
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          const tbody = document.getElementById('products-table');
+          if (!data.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="6">No products yet. Add one above!</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.map(p => {
+            const rowClass  = p.is_low_stock ? ' class="low-stock"' : '';
+            const badge     = p.is_low_stock
+              ? '<span class="badge badge-low">Low Stock</span>'
+              : '<span class="badge badge-ok">OK</span>';
+            // Encode full product as JSON for the edit button
+            const encoded = escapeHtml(JSON.stringify(p));
+            return `
+              <tr${rowClass}>
+                <td><strong>${escapeHtml(p.name)}</strong></td>
+                <td>${escapeHtml(p.category_name)}</td>
+                <td>$${parseFloat(p.price).toFixed(2)}</td>
+                <td>${p.quantity}</td>
+                <td>${badge}</td>
+                <td style="white-space:nowrap;">
+                  <button class="btn btn-edit" onclick='editProduct(${JSON.stringify(p)})'>Edit</button>
+                  <button class="btn btn-danger" onclick="deleteProduct(${p.id})">Delete</button>
+                </td>
+              </tr>`;
+          }).join('');
+        })
+        .catch(err => {
+          showError('Could not load products. Make sure the backend server is running at ' + API);
+          document.getElementById('products-table').innerHTML =
+            '<tr class="empty-row"><td colspan="6">Failed to load data.</td></tr>';
+          console.error(err);
+        });
+    }
+
+    /* ── Form submit (Add or Update) ─────────────────── */
+    document.getElementById('product-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const id          = document.getElementById('product-id').value;
+      const name        = document.getElementById('product-name').value.trim();
+      const category    = document.getElementById('product-category').value;
+      const description = document.getElementById('product-description').value.trim();
+      const price       = document.getElementById('product-price').value;
+      const quantity    = document.getElementById('product-quantity').value;
+      const low_stock_threshold = document.getElementById('product-threshold').value || 10;
+
+      const url    = id ? `${API}/api/products/${id}/` : `${API}/api/products/`;
+      const method = id ? 'PUT' : 'POST';
+
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, category, description, price, quantity, low_stock_threshold })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          return res.json();
+        })
+        .then(() => {
+          showSuccess(id ? 'Product updated!' : 'Product added!');
+          resetForm();
+          loadProducts();
+        })
+        .catch(err => {
+          showError('Failed to save product. Please try again.');
+          console.error(err);
+        });
+    });
+
+    /* ── Edit — pre-fill all form fields ─────────────── */
+    function editProduct(p) {
+      document.getElementById('product-id').value          = p.id;
+      document.getElementById('product-name').value        = p.name;
+      document.getElementById('product-category').value    = p.category;
+      document.getElementById('product-description').value = p.description ?? '';
+      document.getElementById('product-price').value       = p.price;
+      document.getElementById('product-quantity').value    = p.quantity;
+      document.getElementById('product-threshold').value   = p.low_stock_threshold;
+      document.getElementById('form-title').textContent    = 'Edit Product';
+      document.getElementById('submit-btn').textContent    = 'Update Product';
+      document.getElementById('cancel-btn').style.display  = 'inline-block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /* ── Cancel edit — reset form ────────────────────── */
+    document.getElementById('cancel-btn').addEventListener('click', resetForm);
+
+    function resetForm() {
+      document.getElementById('product-form').reset();
+      document.getElementById('product-id').value         = '';
+      document.getElementById('product-threshold').value  = '10';
+      document.getElementById('form-title').textContent   = 'Add Product';
+      document.getElementById('submit-btn').textContent   = 'Add Product';
+      document.getElementById('cancel-btn').style.display = 'none';
+    }
+
+    /* ── Delete ──────────────────────────────────────── */
+    function deleteProduct(id) {
+      if (!confirm('Delete this product? This cannot be undone.')) return;
+      fetch(`${API}/api/products/${id}/`, { method: 'DELETE' })
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          showSuccess('Product deleted.');
+          loadProducts();
+        })
+        .catch(err => {
+          showError('Failed to delete product.');
+          console.error(err);
+        });
+    }
+
+    /* ── Init ────────────────────────────────────────── */
+    loadCategories();
+    loadProducts();
+  </script>
+
+</body>
+</html>

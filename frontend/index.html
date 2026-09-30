@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Inventory Management</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a class="brand" href="/">📦 Inventory</a>
+    <a href="/" class="active">Dashboard</a>
+    <a href="/products/">Products</a>
+    <a href="/categories/">Categories</a>
+  </nav>
+
+  <!-- Page content -->
+  <div class="page">
+    <h1 class="page-title">Dashboard</h1>
+
+    <!-- Error alert (hidden by default) -->
+    <div id="error-msg" class="alert alert-error" style="display:none;"></div>
+
+    <!-- Stat cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">Total Products</div>
+        <div class="card-value" id="total-products">—</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Total Categories</div>
+        <div class="card-value" id="total-categories">—</div>
+      </div>
+      <div class="card card-danger">
+        <div class="card-label">Low Stock Items</div>
+        <div class="card-value" id="low-stock-count">—</div>
+      </div>
+    </div>
+
+    <!-- Low-stock alerts panel -->
+    <div class="panel">
+      <h2>⚠️ Low Stock Alerts</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th>Quantity</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="low-stock-table">
+            <tr class="empty-row"><td colspan="3">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    function showError(msg) {
+      const el = document.getElementById('error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function loadDashboard() {
+      fetch(`${API}/api/dashboard/`)
+        .then(res => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          return res.json();
+        })
+        .then(data => {
+          // Populate stat cards
+          document.getElementById('total-products').textContent   = data.total_products   ?? '—';
+          document.getElementById('total-categories').textContent = data.total_categories ?? '—';
+          document.getElementById('low-stock-count').textContent  = data.low_stock_count  ?? '—';
+
+          // Populate low-stock table
+          const tbody = document.getElementById('low-stock-table');
+          const items = data.low_stock_items || [];
+
+          if (items.length === 0) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No low-stock items. All good! ✅</td></tr>';
+            return;
+          }
+
+          tbody.innerHTML = items.map(item => `
+            <tr class="low-stock">
+              <td>${escapeHtml(item.name)}</td>
+              <td>${item.quantity}</td>
+              <td><span class="badge badge-low">Low Stock</span></td>
+            </tr>
+          `).join('');
+        })
+        .catch(err => {
+          showError('Could not load dashboard data. Make sure the backend server is running at ' + API);
+          document.getElementById('low-stock-table').innerHTML =
+            '<tr class="empty-row"><td colspan="3">Failed to load data.</td></tr>';
+          console.error(err);
+        });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // Load on page ready
+    loadDashboard();
+  </script>
+
+</body>
+</html>
